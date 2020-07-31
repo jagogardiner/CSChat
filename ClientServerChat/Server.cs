@@ -1,4 +1,8 @@
-﻿using System.Diagnostics;
+﻿using System;
+using System.Collections;
+using System.Diagnostics;
+using System.Net;
+using System.Net.Sockets;
 
 namespace ClientServerChat
 {
@@ -13,6 +17,19 @@ namespace ClientServerChat
         }
         /* Make the server configuration static so it is applicable within the Server class. */
         static Configuration config = new Configuration();
+
+        private struct ServerInstance
+        {
+            /* Networking and instance stuff */
+            public TcpListener server;
+            public Hashtable clients;
+            public NetworkStream nwStream;
+
+            /* Any data that is useful */
+            public bool alive;
+            public int users;
+        }
+        static ServerInstance instance = new ServerInstance();
 
         /* Launch() is responsible for performing actions upon the user selecting the server mode, such as launching a Server instance */
         public static void Launch()
@@ -31,7 +48,8 @@ namespace ClientServerChat
         /* SendRestart() is the userspace method for sending a clean Server instance restart. */
         public static void SendRestart()
         {
-
+            instance.alive = false;
+            if(instance.server == null) { OpenInstance(); };
         }
 
         /* SetConfiguration() takes passed configuration parameters and updates them within the configuration struct, config */
@@ -54,13 +72,25 @@ namespace ClientServerChat
         /* OpenInstance() is responsible for opening a Server based the configuration within the Configuration struct */
         private static void OpenInstance()
         {
+            /* Make sure instance is alive and is properly initiated. */
+            instance.alive = true;
+            instance.server = new TcpListener(IPAddress.Parse(config.address), config.port);
+            instance.server.Start();
 
-        }
+            Byte[] bytes = new Byte[1024];
+            String data = null;
 
-        /* CloseInstance() is responsible for closing any open Servers that are listening */
-        private static void CloseInstance()
-        {
+            while (instance.alive)
+            {
+                TcpClient client = instance.server.AcceptTcpClient();
+                instance.users++;
 
+                instance.nwStream = client.GetStream();
+                instance.nwStream.Read(bytes, 0, (int)client.ReceiveBufferSize);
+                data = System.Text.Encoding.ASCII.GetString(bytes);
+                data = data.Substring(0, data.IndexOf("$")); // Split messages or names by $
+                instance.clients.Add(data, client);
+            }
         }
     }
 }
